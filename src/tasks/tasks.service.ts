@@ -53,9 +53,14 @@ export class TasksService {
 
     const { projectId, ...taskData } = createTaskDto;
 
+    const formattedData = { ...taskData };
+    if (formattedData.dueDate) {
+      formattedData.dueDate = new Date(formattedData.dueDate).toISOString();
+    }
+
     return this.prisma.task.create({
       data: {
-        ...taskData,
+        ...formattedData,
         user: {
           connect: {
             id: userId,
@@ -160,9 +165,14 @@ export class TasksService {
       };
     }
 
+    const formattedData = { ...updateTaskDto };
+    if (formattedData.dueDate) {
+      formattedData.dueDate = new Date(formattedData.dueDate).toISOString();
+    }
+
     return this.prisma.task.update({
       where: { id },
-      data,
+      data: formattedData,
     });
   }
 
