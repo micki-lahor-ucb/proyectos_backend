@@ -1,10 +1,10 @@
-# Project Management API
+# Gestión de Proyectos API
 
 Backend API para el sistema de gestión de proyectos y tareas.
 
 ## Requisitos
 
-- Node.js (versión 16 o superior)
+- Node.js (versión 18 o superior)
 - PostgreSQL
 - npm o yarn
 
@@ -12,8 +12,8 @@ Backend API para el sistema de gestión de proyectos y tareas.
 
 1. Clonar el repositorio:
    ```bash
-   git clone <url-repositorio>
-   cd project-management-backend
+   git clone https://github.com/micki-lahor-ucb/proyectos_backend.git
+   cd proyectos_backend
    ```
 
 2. Instalar dependencias:
@@ -38,6 +38,11 @@ Backend API para el sistema de gestión de proyectos y tareas.
 5. Ejecutar migraciones de base de datos:
    ```bash
    npx prisma migrate dev
+   ```
+
+6. Ejecutar sembrado de datos en BD:
+   ```bash
+   npm run seed
    ```
 
 ## Ejecución
