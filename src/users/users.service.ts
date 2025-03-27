@@ -13,7 +13,6 @@ export class UsersService {
   constructor(private prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto) {
-    // Verificar si el email ya existe
     const existingUser = await this.prisma.user.findUnique({
       where: { email: createUserDto.email },
     });
@@ -22,10 +21,8 @@ export class UsersService {
       throw new BadRequestException('Email already in use');
     }
 
-    // Hash de la contraseña
     const hashedPassword = await bcrypt.hash(createUserDto.password, 10);
 
-    // Crear el usuario
     const user = await this.prisma.user.create({
       data: {
         ...createUserDto,
@@ -33,7 +30,6 @@ export class UsersService {
       },
     });
 
-    // Retornar usuario sin la contraseña
     const { password, ...result } = user;
     return result;
   }
@@ -63,7 +59,6 @@ export class UsersService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto) {
-    // Si la actualización incluye un password, lo hasheamos
     if (updateUserDto.password) {
       updateUserDto.password = await bcrypt.hash(updateUserDto.password, 10);
     }
