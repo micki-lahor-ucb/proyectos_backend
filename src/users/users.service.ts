@@ -30,13 +30,17 @@ export class UsersService {
       },
     });
 
-    const { password, ...result } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _password, ...result } = user;
     return result;
   }
 
   async findAll() {
     const users = await this.prisma.user.findMany();
-    return users.map(({ password, ...rest }) => rest);
+    return users.map(
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      ({ password: _password, ...rest }) => rest,
+    );
   }
 
   async findOne(id: string) {
@@ -48,7 +52,8 @@ export class UsersService {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
 
-    const { password, ...result } = user;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { password: _password, ...result } = user;
     return result;
   }
 
@@ -69,9 +74,10 @@ export class UsersService {
         data: updateUserDto,
       });
 
-      const { password, ...result } = user;
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const { password: _password, ...result } = user;
       return result;
-    } catch (error) {
+    } catch {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
   }
@@ -82,7 +88,7 @@ export class UsersService {
         where: { id },
       });
       return { message: `User with ID ${id} was deleted successfully` };
-    } catch (error) {
+    } catch {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
   }
