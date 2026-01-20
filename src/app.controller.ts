@@ -36,4 +36,11 @@ export class AppController {
       );
     }
   }
+  
+  // Este comentario tiene formato incorrecto y una variable no usada para romper el CI
+  @Get('test')
+  testEndpoint( unusedParam: string ) {
+    const unusedVar = 'esto rompe el lint';
+    return 'test';
+  }
 }
