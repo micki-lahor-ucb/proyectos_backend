@@ -22,6 +22,8 @@ export class AppController {
       return {
         status: 'ok',
         database: 'connected',
+        release: process.env.RELEASE_ID || 'unknown',
+        environment: process.env.NODE_ENV || 'development',
         timestamp: new Date().toISOString(),
       };
     } catch (error) {
@@ -29,6 +31,8 @@ export class AppController {
         {
           status: 'error',
           database: 'disconnected',
+          release: process.env.RELEASE_ID || 'unknown',
+          environment: process.env.NODE_ENV || 'development',
           error: error.message,
           timestamp: new Date().toISOString(),
         },

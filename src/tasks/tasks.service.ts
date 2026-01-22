@@ -7,10 +7,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { LoggingService } from '../common/logging/logging.service';
 
 @Injectable()
 export class TasksService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private loggingService: LoggingService,
+  ) {}
 
   async create(createTaskDto: CreateTaskDto, userId: string) {
     const project = await this.prisma.project.findUnique({
@@ -58,7 +62,7 @@ export class TasksService {
       formattedData.dueDate = new Date(formattedData.dueDate).toISOString();
     }
 
-    return this.prisma.task.create({
+    const task = await this.prisma.task.create({
       data: {
         ...formattedData,
         user: {
@@ -73,6 +77,14 @@ export class TasksService {
         },
       },
     });
+
+    this.loggingService.log(
+      `Task created: ${task.id} - ${task.title} in project ${projectId}`,
+      'TasksService',
+      userId,
+    );
+
+    return task;
   }
 
   async findAll(userId: string) {

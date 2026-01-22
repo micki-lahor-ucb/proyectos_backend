@@ -6,13 +6,17 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { LoggingService } from '../common/logging/logging.service';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private loggingService: LoggingService,
+  ) {}
 
   async create(createProjectDto: CreateProjectDto, userId: string) {
-    return this.prisma.project.create({
+    const project = await this.prisma.project.create({
       data: {
         ...createProjectDto,
         user: {
@@ -22,6 +26,14 @@ export class ProjectsService {
         },
       },
     });
+
+    this.loggingService.log(
+      `Project created: ${project.id} - ${project.title}`,
+      'ProjectsService',
+      userId,
+    );
+
+    return project;
   }
 
   async findAll(userId: string) {
