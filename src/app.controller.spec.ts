@@ -41,6 +41,8 @@ describe('AppController', () => {
 
       expect(result).toHaveProperty('status', 'ok');
       expect(result).toHaveProperty('database', 'connected');
+      expect(result).toHaveProperty('release');
+      expect(result).toHaveProperty('environment');
       expect(result).toHaveProperty('timestamp');
     });
 

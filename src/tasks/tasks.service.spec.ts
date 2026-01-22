@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { TasksService } from './tasks.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { LoggingService } from '../common/logging/logging.service';
 
 describe('TasksService', () => {
   let service: TasksService;
@@ -23,6 +24,15 @@ describe('TasksService', () => {
             project: {
               findUnique: jest.fn(),
             },
+          },
+        },
+        {
+          provide: LoggingService,
+          useValue: {
+            log: jest.fn(),
+            error: jest.fn(),
+            warn: jest.fn(),
+            debug: jest.fn(),
           },
         },
       ],
