@@ -1,0 +1,237 @@
+name: CD - Staging + Production
+
+on:
+  push:
+    branches: ['main']
+  tags:
+    - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build backend
+        run: npm run build
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Create RELEASE_ID
+        run: |
+          RELEASE_ID=$(date +%Y%m%d_%H%M%S)_${GITHUB_SHA:0:7}
+          echo "$RELEASE_ID" > RELEASE_ID
+          echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_ENV
+          echo "Created RELEASE_ID: $RELEASE_ID"
+
+      - name: Upload backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-release-${{ github.ref_name }}
+          path: |
+            dist
+            node_modules
+            package.json
+            package-lock.json
+            prisma
+            RELEASE_ID
+
+  deploy_staging:
+    name: Deploy to Staging
+    if: github.ref == 'refs/heads/main'
+    runs-on: self-hosted  # Cambiar a ubuntu-latest si usas ngrok
+    needs: [build]
+    environment:
+      name: staging
+      url: ${{ secrets.STAGING_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-release-${{ github.ref_name }}
+          path: ./artifact
+
+      - name: Read RELEASE_ID
+        id: release
+        run: |
+          RELEASE_ID=$(cat ./artifact/RELEASE_ID)
+          echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "Deploying release: $RELEASE_ID"
+
+      - name: Deploy backend to staging
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$STAGING_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts || true
+          
+          RELEASE="${{ steps.release.outputs.RELEASE_ID }}"
+          
+          # Create release directory
+          ssh -i ~/.ssh/deploy_key $STAGING_USER@$STAGING_HOST \
+            "mkdir -p /var/www/project-management/releases/$RELEASE"
+          
+          # Copy backend files
+          rsync -avz -e "ssh -i ~/.ssh/deploy_key" \
+            ./artifact/ \
+            $STAGING_USER@$STAGING_HOST:/var/www/project-management/releases/$RELEASE/
+          
+          # Link shared .env
+          ssh -i ~/.ssh/deploy_key $STAGING_USER@$STAGING_HOST \
+            "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$RELEASE/.env"
+          
+          # Run migrations and switch symlink atomically
+          ssh -i ~/.ssh/deploy_key $STAGING_USER@$STAGING_HOST << EOF
+            cd /var/www/project-management/releases/$RELEASE
+            export NODE_ENV=staging
+            export RELEASE_ID=$RELEASE
+            npx prisma migrate deploy
+            ln -sfn /var/www/project-management/releases/$RELEASE /var/www/project-management/current
+          EOF
+
+      - name: Health check staging
+        run: |
+          sleep 5
+          curl -f "${{ secrets.STAGING_APP_URL }}/api/health" || exit 1
+
+  rollback_staging:
+    name: Rollback Staging
+    if: failure() && github.ref == 'refs/heads/main'
+    runs-on: self-hosted  # Cambiar a ubuntu-latest si usas ngrok
+    needs: [deploy_staging]
+    environment:
+      name: staging
+    steps:
+      - name: Rollback to previous release
+        env:
+          STAGING_HOST: ${{ secrets.STAGING_HOST }}
+          STAGING_USER: ${{ secrets.STAGING_USER }}
+          STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$STAGING_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts || true
+          
+          ssh -i ~/.ssh/deploy_key $STAGING_USER@$STAGING_HOST << EOF
+            PREV=\$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')
+            if [ -n "\$PREV" ]; then
+              echo "Rolling back to: \$PREV"
+              ln -sfn \$PREV /var/www/project-management/current
+            else
+              echo "No previous release found for rollback"
+              exit 1
+            fi
+          EOF
+
+  deploy_production:
+    name: Deploy to Production
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: self-hosted  # Cambiar a ubuntu-latest si usas ngrok
+    needs: [build]
+    environment:
+      name: production
+      url: ${{ secrets.PROD_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download backend artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-release-${{ github.ref_name }}
+          path: ./artifact
+
+      - name: Read RELEASE_ID
+        id: release
+        run: |
+          RELEASE_ID=$(cat ./artifact/RELEASE_ID)
+          echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_OUTPUT
+          echo "Deploying release: $RELEASE_ID"
+
+      - name: Deploy backend to production
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$PROD_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $PROD_HOST >> ~/.ssh/known_hosts || true
+          
+          RELEASE="${{ steps.release.outputs.RELEASE_ID }}"
+          
+          # Create release directory
+          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST \
+            "mkdir -p /var/www/project-management/releases/$RELEASE"
+          
+          # Copy backend files
+          rsync -avz -e "ssh -i ~/.ssh/deploy_key" \
+            ./artifact/ \
+            $PROD_USER@$PROD_HOST:/var/www/project-management/releases/$RELEASE/
+          
+          # Link shared .env
+          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST \
+            "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$RELEASE/.env"
+          
+          # Run migrations and switch symlink atomically
+          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST << EOF
+            cd /var/www/project-management/releases/$RELEASE
+            export NODE_ENV=production
+            export RELEASE_ID=$RELEASE
+            npx prisma migrate deploy
+            ln -sfn /var/www/project-management/releases/$RELEASE /var/www/project-management/current
+          EOF
+
+      - name: Health check production
+        run: |
+          sleep 5
+          curl -f "${{ secrets.PROD_APP_URL }}/api/health" || exit 1
+
+  rollback_production:
+    name: Rollback Production
+    if: failure() && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch')
+    runs-on: self-hosted  # Cambiar a ubuntu-latest si usas ngrok
+    needs: [deploy_production]
+    environment:
+      name: production
+    steps:
+      - name: Rollback to previous release
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST }}
+          PROD_USER: ${{ secrets.PROD_USER }}
+          PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$PROD_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H $PROD_HOST >> ~/.ssh/known_hosts || true
+          
+          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST << EOF
+            PREV=\$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')
+            if [ -n "\$PREV" ]; then
+              echo "Rolling back to: \$PREV"
+              ln -sfn \$PREV /var/www/project-management/current
+            else
+              echo "No previous release found for rollback"
+              exit 1
+            fi
+          EOF
