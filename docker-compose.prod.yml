@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  prod-server:
+    image: ubuntu:22.04
+    container_name: prod-server
+    ports:
+      - '2223:22' # SSH en puerto 2223
+      - '3002:3000' # API en puerto 3002
+    volumes:
+      - prod-data:/var/www/project-management
+    environment:
+      - DEBIAN_FRONTEND=noninteractive
+    command: >
+      bash -c "
+      set -e &&
+      echo 'Iniciando configuración del servidor...' &&
+      apt-get update -qq &&
+      apt-get install -y openssh-server sudo rsync nodejs npm postgresql-client curl > /dev/null 2>&1 &&
+      echo 'Creando estructura de directorios...' &&
+      mkdir -p /var/www/project-management/releases &&
+      mkdir -p /var/www/project-management/shared &&
+      echo 'Creando usuario deploy...' &&
+      (id -u deploy > /dev/null 2>&1 || useradd -m -s /bin/bash deploy) &&
+      echo 'deploy:deploy123' | chpasswd &&
+      echo 'deploy ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers &&
+      echo 'Configurando SSH...' &&
+      mkdir -p /home/deploy/.ssh &&
+      touch /home/deploy/.ssh/authorized_keys &&
+      chmod 700 /home/deploy/.ssh &&
+      chmod 600 /home/deploy/.ssh/authorized_keys &&
+      chown -R deploy:deploy /home/deploy &&
+      chown -R deploy:deploy /var/www/project-management &&
+      echo 'Iniciando SSH daemon...' &&
+      mkdir -p /var/run/sshd &&
+      /usr/sbin/sshd -D &
+      echo 'Servidor configurado correctamente' &&
+      tail -f /dev/null
+      "
+    networks:
+      - prod-network
+    healthcheck:
+      test: ['CMD-SHELL', 'test -d /home/deploy && test -f /home/deploy/.ssh/authorized_keys && pgrep sshd > /dev/null']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  prod-db:
+    image: postgres:15-alpine
+    container_name: prod-db
+    environment:
+      POSTGRES_DB: project_management
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5456:5432'
+    volumes:
+      - prod-db-data:/var/lib/postgresql/data
+    networks:
+      - prod-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  prod-data:
+  prod-db-data:
+
+networks:
+  prod-network:
