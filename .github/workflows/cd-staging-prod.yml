@@ -180,6 +180,17 @@ jobs:
             'node -v',
             'major=$(node -p "parseInt(process.versions.node.split(String.fromCharCode(46))[0],10)")',
             'if [ "$major" -lt 18 ]; then echo "Node >=18 required for Prisma" >&2; exit 1; fi',
+            '# Ensure Prisma engine binaries are executable (tar created on Windows may lose +x bits)',
+            'if [ -d "./node_modules/@prisma/engines" ]; then',
+            '  chmod -R a+rX "./node_modules/@prisma/engines" || true',
+            '  chmod +x ./node_modules/@prisma/engines/* 2>/dev/null || true',
+            '  find "./node_modules/@prisma/engines" -type f -maxdepth 1 -exec chmod +x {} \; 2>/dev/null || true',
+            'fi',
+            'if [ -d "./node_modules/.prisma/client" ]; then',
+            '  chmod -R a+rX "./node_modules/.prisma/client" || true',
+            '  chmod +x ./node_modules/.prisma/client/*engine* 2>/dev/null || true',
+            'fi',
+            'if [ -d "./node_modules/.bin" ]; then chmod -R a+rx "./node_modules/.bin" 2>/dev/null || true; fi',
             'if [ -f "./node_modules/prisma/build/index.js" ]; then',
             '  node ./node_modules/prisma/build/index.js migrate deploy',
             'else',
@@ -363,10 +374,6 @@ jobs:
           if (Test-Path $knownHosts) { Remove-Item -Force $knownHosts }
           & ssh-keygen -R "[$remoteHost]:$env:PROD_PORT" 2>$null | Out-Null
           & ssh-keygen -R $remoteHost 2>$null | Out-Null
-          $knownHosts = Join-Path $sshDir "known_hosts_ci"
-          if (Test-Path $knownHosts) { Remove-Item -Force $knownHosts }
-          & ssh-keygen -R "[$remoteHost]:$env:PROD_PORT" 2>$null | Out-Null
-          & ssh-keygen -R $remoteHost 2>$null | Out-Null
           
           # Save SSH key with proper format (no BOM, LF line endings)
           $keyContent = $env:PROD_SSH_KEY
@@ -445,7 +452,12 @@ jobs:
             '# Ensure Prisma engine binaries are executable (tar created on Windows may lose +x bits)',
             'if [ -d "./node_modules/@prisma/engines" ]; then',
             '  chmod -R a+rX "./node_modules/@prisma/engines" || true',
-            '  find "./node_modules/@prisma/engines" -maxdepth 1 -type f -name "*engine*" -exec chmod +x {} \\; 2>/dev/null || true',
+            '  chmod +x ./node_modules/@prisma/engines/* 2>/dev/null || true',
+            '  find "./node_modules/@prisma/engines" -maxdepth 1 -type f -exec chmod +x {} \\; 2>/dev/null || true',
+            'fi',
+            'if [ -d "./node_modules/.prisma/client" ]; then',
+            '  chmod -R a+rX "./node_modules/.prisma/client" || true',
+            '  chmod +x ./node_modules/.prisma/client/*engine* 2>/dev/null || true',
             'fi',
             'if [ -d "./node_modules/.bin" ]; then chmod -R a+rx "./node_modules/.bin" 2>/dev/null || true; fi',
             'if [ -f "./node_modules/prisma/build/index.js" ]; then',
