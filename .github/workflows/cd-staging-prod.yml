@@ -127,7 +127,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Failed to create release directory" }
           
           Write-Host "Copying files..."
-          # Copy backend files using scp (more reliable than rsync on Windows)
+          # Pack + copy a single file (much faster than recursive scp for node_modules)
+          $archive = "artifact-$env:RELEASE.tgz"
+          if (Test-Path $archive) { Remove-Item -Force $archive }
+          & tar -czf $archive -C ./artifact .
+          if ($LASTEXITCODE -ne 0) { throw "Failed to create tar.gz archive" }
+
+          # Copy archive
           $scpArgs = @(
             "-i", "$sshDir\deploy_key",
             "-P", $env:STAGING_PORT,
@@ -136,8 +142,7 @@ jobs:
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
-            "-r",
-            "./artifact/."
+            $archive
           )
           $scpTarget = "${remote}:/var/www/project-management/releases/$env:RELEASE/"
           & scp @scpArgs $scpTarget
@@ -146,6 +151,8 @@ jobs:
           Write-Host "Running migrations and switching symlink..."
           # Link shared .env and run migrations
           $deployScript = "cd /var/www/project-management/releases/$env:RELEASE`n" +
+            "tar -xzf $archive -C /var/www/project-management/releases/$env:RELEASE`n" +
+            "rm -f $archive`n" +
             "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env`n" +
             "export NODE_ENV=staging`n" +
             "export RELEASE_ID=$env:RELEASE`n" +
@@ -304,7 +311,13 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Failed to create release directory" }
           
           Write-Host "Copying files..."
-          # Copy backend files using scp (more reliable than rsync on Windows)
+          # Pack + copy a single file (much faster than recursive scp for node_modules)
+          $archive = "artifact-$env:RELEASE.tgz"
+          if (Test-Path $archive) { Remove-Item -Force $archive }
+          & tar -czf $archive -C ./artifact .
+          if ($LASTEXITCODE -ne 0) { throw "Failed to create tar.gz archive" }
+
+          # Copy archive
           $scpArgs = @(
             "-i", "$sshDir\deploy_key",
             "-P", $env:PROD_PORT,
@@ -313,8 +326,7 @@ jobs:
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
-            "-r",
-            "./artifact/."
+            $archive
           )
           $scpTarget = "${remote}:/var/www/project-management/releases/$env:RELEASE/"
           & scp @scpArgs $scpTarget
@@ -323,6 +335,8 @@ jobs:
           Write-Host "Running migrations and switching symlink..."
           # Link shared .env and run migrations
           $deployScript = "cd /var/www/project-management/releases/$env:RELEASE`n" +
+            "tar -xzf $archive -C /var/www/project-management/releases/$env:RELEASE`n" +
+            "rm -f $archive`n" +
             "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env`n" +
             "export NODE_ENV=production`n" +
             "export RELEASE_ID=$env:RELEASE`n" +
