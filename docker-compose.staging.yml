@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   staging-server:
-    image: ubuntu:22.04
+    image: node:20-bookworm-slim
     container_name: staging-server
     ports:
       - '2222:22' # SSH en puerto 2222
@@ -19,11 +19,10 @@ services:
         apt-get update -qq
 
         # Dependencias base
-        apt-get install -y openssh-server sudo rsync postgresql-client curl ca-certificates gnupg > /dev/null 2>&1
+        apt-get install -y openssh-server sudo rsync postgresql-client curl ca-certificates procps > /dev/null 2>&1
 
-        # Node.js 20 (requerido para Prisma moderno)
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - > /dev/null 2>&1
-        apt-get install -y nodejs > /dev/null 2>&1
+        # Node.js ya viene en la imagen base (node:20)
+        node -v
 
         echo "Creando estructura de directorios..."
         mkdir -p /var/www/project-management/releases
