@@ -67,7 +67,7 @@ jobs:
 
       - name: Read RELEASE_ID
         id: release
-        shell: bash
+        shell: "C:\\Archivos de programa\\Git\\bin\\bash.exe"
         run: |
           RELEASE_ID=$(cat ./artifact/RELEASE_ID)
           echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_OUTPUT
@@ -78,7 +78,7 @@ jobs:
           STAGING_HOST: ${{ secrets.STAGING_HOST }}
           STAGING_USER: ${{ secrets.STAGING_USER }}
           STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-        shell: bash
+        shell: "C:\\Archivos de programa\\Git\\bin\\bash.exe"
         run: |
           mkdir -p ~/.ssh
           echo "$STAGING_SSH_KEY" > ~/.ssh/deploy_key
@@ -112,7 +112,7 @@ jobs:
       - name: Health check staging
         env:
           STAGING_APP_URL: ${{ secrets.STAGING_APP_URL }}
-        shell: bash
+        shell: "C:\\Archivos de programa\\Git\\bin\\bash.exe"
         run: |
           sleep 5
           curl -f "$STAGING_APP_URL/api/health" || exit 1
@@ -130,7 +130,7 @@ jobs:
           STAGING_HOST: ${{ secrets.STAGING_HOST }}
           STAGING_USER: ${{ secrets.STAGING_USER }}
           STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-        shell: bash
+        shell: "C:\\Archivos de programa\\Git\\bin\\bash.exe"
         run: |
           mkdir -p ~/.ssh
           echo "$STAGING_SSH_KEY" > ~/.ssh/deploy_key
@@ -166,7 +166,7 @@ jobs:
 
       - name: Read RELEASE_ID
         id: release
-        shell: bash
+        shell: "C:\\Archivos de programa\\Git\\bin\\bash.exe"
         run: |
           RELEASE_ID=$(cat ./artifact/RELEASE_ID)
           echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_OUTPUT
@@ -177,7 +177,7 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-        shell: bash
+        shell: "C:\\Archivos de programa\\Git\\bin\\bash.exe"
         run: |
           mkdir -p ~/.ssh
           echo "$PROD_SSH_KEY" > ~/.ssh/deploy_key
@@ -211,7 +211,7 @@ jobs:
       - name: Health check production
         env:
           PROD_APP_URL: ${{ secrets.PROD_APP_URL }}
-        shell: bash
+        shell: "C:\\Archivos de programa\\Git\\bin\\bash.exe"
         run: |
           sleep 5
           curl -f "$PROD_APP_URL/api/health" || exit 1
@@ -229,7 +229,7 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-        shell: bash
+        shell: "C:\\Archivos de programa\\Git\\bin\\bash.exe"
         run: |
           mkdir -p ~/.ssh
           echo "$PROD_SSH_KEY" > ~/.ssh/deploy_key
