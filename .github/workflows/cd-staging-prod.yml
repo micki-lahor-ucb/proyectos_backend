@@ -67,55 +67,59 @@ jobs:
 
       - name: Read RELEASE_ID
         id: release
-        shell: sh
+        shell: pwsh
         run: |
-          RELEASE_ID=$(cat ./artifact/RELEASE_ID)
-          echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_OUTPUT
-          echo "Deploying release: $RELEASE_ID"
+          $RELEASE_ID = Get-Content ./artifact/RELEASE_ID -Raw
+          $RELEASE_ID = $RELEASE_ID.Trim()
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "RELEASE_ID=$RELEASE_ID"
+          Write-Host "Deploying release: $RELEASE_ID"
 
       - name: Deploy backend to staging
         env:
           STAGING_HOST: ${{ secrets.STAGING_HOST }}
           STAGING_USER: ${{ secrets.STAGING_USER }}
           STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-        shell: sh
+        shell: pwsh
         run: |
-          mkdir -p ~/.ssh
-          echo "$STAGING_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts || true
+          $sshDir = "$env:USERPROFILE\.ssh"
+          if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
-          RELEASE="${{ steps.release.outputs.RELEASE_ID }}"
+          $STAGING_SSH_KEY | Out-File -FilePath "$sshDir\deploy_key" -Encoding utf8 -NoNewline
+          icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
+          
+          $env:RELEASE = "${{ steps.release.outputs.RELEASE_ID }}"
           
           # Create release directory
-          ssh -i ~/.ssh/deploy_key $STAGING_USER@$STAGING_HOST \
-            "mkdir -p /var/www/project-management/releases/$RELEASE"
+          & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" "mkdir -p /var/www/project-management/releases/$env:RELEASE"
           
-          # Copy backend files
-          rsync -avz -e "ssh -i ~/.ssh/deploy_key" \
-            ./artifact/ \
-            $STAGING_USER@$STAGING_HOST:/var/www/project-management/releases/$RELEASE/
+          # Copy backend files using rsync (requires Git Bash or WSL)
+          $bashPath = "C:\Program Files\Git\bin\bash.exe"
+          if (Test-Path $bashPath) {
+            & $bashPath -c "rsync -avz -e `"ssh -i $sshDir/deploy_key`" ./artifact/ $env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
+          } else {
+            # Fallback: use scp
+            & scp -i "$sshDir\deploy_key" -r ./artifact/* "$env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
+          }
           
-          # Link shared .env
-          ssh -i ~/.ssh/deploy_key $STAGING_USER@$STAGING_HOST \
-            "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$RELEASE/.env"
-          
-          # Run migrations and switch symlink atomically
-          ssh -i ~/.ssh/deploy_key $STAGING_USER@$STAGING_HOST << EOF
-            cd /var/www/project-management/releases/$RELEASE
-            export NODE_ENV=staging
-            export RELEASE_ID=$RELEASE
-            npx prisma migrate deploy
-            ln -sfn /var/www/project-management/releases/$RELEASE /var/www/project-management/current
-          EOF
+          # Link shared .env and run migrations
+          $deployScript = @"
+          cd /var/www/project-management/releases/$env:RELEASE
+          ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env
+          export NODE_ENV=staging
+          export RELEASE_ID=$env:RELEASE
+          npx prisma migrate deploy
+          ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
+          "@
+          $deployScript | & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
 
       - name: Health check staging
         env:
           STAGING_APP_URL: ${{ secrets.STAGING_APP_URL }}
-        shell: sh
+        shell: pwsh
         run: |
-          sleep 5
-          curl -f "$STAGING_APP_URL/api/health" || exit 1
+          Start-Sleep -Seconds 5
+          $response = Invoke-WebRequest -Uri "$env:STAGING_APP_URL/api/health" -UseBasicParsing
+          if ($response.StatusCode -ne 200) { exit 1 }
 
   rollback_staging:
     name: Rollback Staging
@@ -130,23 +134,25 @@ jobs:
           STAGING_HOST: ${{ secrets.STAGING_HOST }}
           STAGING_USER: ${{ secrets.STAGING_USER }}
           STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
-        shell: sh
+        shell: pwsh
         run: |
-          mkdir -p ~/.ssh
-          echo "$STAGING_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H $STAGING_HOST >> ~/.ssh/known_hosts || true
+          $sshDir = "$env:USERPROFILE\.ssh"
+          if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
-          ssh -i ~/.ssh/deploy_key $STAGING_USER@$STAGING_HOST << EOF
-            PREV=\$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')
-            if [ -n "\$PREV" ]; then
-              echo "Rolling back to: \$PREV"
-              ln -sfn \$PREV /var/www/project-management/current
-            else
-              echo "No previous release found for rollback"
-              exit 1
-            fi
-          EOF
+          $STAGING_SSH_KEY | Out-File -FilePath "$sshDir\deploy_key" -Encoding utf8 -NoNewline
+          icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
+          
+          $rollbackScript = @"
+          PREV=`$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')
+          if [ -n "`$PREV" ]; then
+            echo "Rolling back to: `$PREV"
+            ln -sfn `$PREV /var/www/project-management/current
+          else
+            echo "No previous release found for rollback"
+            exit 1
+          fi
+          "@
+          $rollbackScript | & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
 
   deploy_production:
     name: Deploy to Production
@@ -166,55 +172,59 @@ jobs:
 
       - name: Read RELEASE_ID
         id: release
-        shell: sh
+        shell: pwsh
         run: |
-          RELEASE_ID=$(cat ./artifact/RELEASE_ID)
-          echo "RELEASE_ID=$RELEASE_ID" >> $GITHUB_OUTPUT
-          echo "Deploying release: $RELEASE_ID"
+          $RELEASE_ID = Get-Content ./artifact/RELEASE_ID -Raw
+          $RELEASE_ID = $RELEASE_ID.Trim()
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "RELEASE_ID=$RELEASE_ID"
+          Write-Host "Deploying release: $RELEASE_ID"
 
       - name: Deploy backend to production
         env:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-        shell: sh
+        shell: pwsh
         run: |
-          mkdir -p ~/.ssh
-          echo "$PROD_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H $PROD_HOST >> ~/.ssh/known_hosts || true
+          $sshDir = "$env:USERPROFILE\.ssh"
+          if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
-          RELEASE="${{ steps.release.outputs.RELEASE_ID }}"
+          $PROD_SSH_KEY | Out-File -FilePath "$sshDir\deploy_key" -Encoding utf8 -NoNewline
+          icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
+          
+          $env:RELEASE = "${{ steps.release.outputs.RELEASE_ID }}"
           
           # Create release directory
-          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST \
-            "mkdir -p /var/www/project-management/releases/$RELEASE"
+          & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" "mkdir -p /var/www/project-management/releases/$env:RELEASE"
           
-          # Copy backend files
-          rsync -avz -e "ssh -i ~/.ssh/deploy_key" \
-            ./artifact/ \
-            $PROD_USER@$PROD_HOST:/var/www/project-management/releases/$RELEASE/
+          # Copy backend files using rsync (requires Git Bash or WSL)
+          $bashPath = "C:\Program Files\Git\bin\bash.exe"
+          if (Test-Path $bashPath) {
+            & $bashPath -c "rsync -avz -e `"ssh -i $sshDir/deploy_key`" ./artifact/ $env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
+          } else {
+            # Fallback: use scp
+            & scp -i "$sshDir\deploy_key" -r ./artifact/* "$env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
+          }
           
-          # Link shared .env
-          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST \
-            "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$RELEASE/.env"
-          
-          # Run migrations and switch symlink atomically
-          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST << EOF
-            cd /var/www/project-management/releases/$RELEASE
-            export NODE_ENV=production
-            export RELEASE_ID=$RELEASE
-            npx prisma migrate deploy
-            ln -sfn /var/www/project-management/releases/$RELEASE /var/www/project-management/current
-          EOF
+          # Link shared .env and run migrations
+          $deployScript = @"
+          cd /var/www/project-management/releases/$env:RELEASE
+          ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env
+          export NODE_ENV=production
+          export RELEASE_ID=$env:RELEASE
+          npx prisma migrate deploy
+          ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
+          "@
+          $deployScript | & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
 
       - name: Health check production
         env:
           PROD_APP_URL: ${{ secrets.PROD_APP_URL }}
-        shell: sh
+        shell: pwsh
         run: |
-          sleep 5
-          curl -f "$PROD_APP_URL/api/health" || exit 1
+          Start-Sleep -Seconds 5
+          $response = Invoke-WebRequest -Uri "$env:PROD_APP_URL/api/health" -UseBasicParsing
+          if ($response.StatusCode -ne 200) { exit 1 }
 
   rollback_production:
     name: Rollback Production
@@ -229,20 +239,22 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
-        shell: sh
+        shell: pwsh
         run: |
-          mkdir -p ~/.ssh
-          echo "$PROD_SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H $PROD_HOST >> ~/.ssh/known_hosts || true
+          $sshDir = "$env:USERPROFILE\.ssh"
+          if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
-          ssh -i ~/.ssh/deploy_key $PROD_USER@$PROD_HOST << EOF
-            PREV=\$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')
-            if [ -n "\$PREV" ]; then
-              echo "Rolling back to: \$PREV"
-              ln -sfn \$PREV /var/www/project-management/current
-            else
-              echo "No previous release found for rollback"
-              exit 1
-            fi
-          EOF
+          $PROD_SSH_KEY | Out-File -FilePath "$sshDir\deploy_key" -Encoding utf8 -NoNewline
+          icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
+          
+          $rollbackScript = @"
+          PREV=`$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')
+          if [ -n "`$PREV" ]; then
+            echo "Rolling back to: `$PREV"
+            ln -sfn `$PREV /var/www/project-management/current
+          else
+            echo "No previous release found for rollback"
+            exit 1
+          fi
+          "@
+          $rollbackScript | & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
