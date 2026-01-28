@@ -3,8 +3,9 @@ name: CD - Staging + Production
 on:
   push:
     branches: ['main']
-  tags:
-    - 'v*'
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -55,7 +56,6 @@ jobs:
     needs: [build]
     environment:
       name: staging
-      url: ${{ secrets.STAGING_APP_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -108,9 +108,11 @@ jobs:
           EOF
 
       - name: Health check staging
+        env:
+          STAGING_APP_URL: ${{ secrets.STAGING_APP_URL }}
         run: |
           sleep 5
-          curl -f "${{ secrets.STAGING_APP_URL }}/api/health" || exit 1
+          curl -f "$STAGING_APP_URL/api/health" || exit 1
 
   rollback_staging:
     name: Rollback Staging
@@ -149,7 +151,6 @@ jobs:
     needs: [build]
     environment:
       name: production
-      url: ${{ secrets.PROD_APP_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -202,9 +203,11 @@ jobs:
           EOF
 
       - name: Health check production
+        env:
+          PROD_APP_URL: ${{ secrets.PROD_APP_URL }}
         run: |
           sleep 5
-          curl -f "${{ secrets.PROD_APP_URL }}/api/health" || exit 1
+          curl -f "$PROD_APP_URL/api/health" || exit 1
 
   rollback_production:
     name: Rollback Production
