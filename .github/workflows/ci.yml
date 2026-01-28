@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: ['main']
+  pull_request:
+    branches: ['main']
+
+jobs:
+  backend_quality:
+    name: Backend Quality Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Prettier check
+        run: npm run format:check
+
+      - name: Run ESLint
+        run: npm run lint:check
+
+      - name: Type check
+        run: npm run typecheck
+
+  backend_tests:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: project_management
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - '5432:5432'
+        options: >-
+          --health-cmd="pg_isready -U postgres -d project_management"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup Prisma
+        run: npx prisma generate
+
+      - name: Run migrations
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/project_management?schema=public'
+
+      - name: Run unit tests
+        run: npm run test
+        env:
+          DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/project_management?schema=public'
+          JWT_SECRET: 'test-secret-key-for-ci'
+          NODE_ENV: 'test'
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+        env:
+          DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/project_management?schema=public'
+          JWT_SECRET: 'test-secret-key-for-ci'
+          NODE_ENV: 'test'
