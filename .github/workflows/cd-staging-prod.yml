@@ -96,28 +96,59 @@ jobs:
           
           $env:RELEASE = "${{ steps.release.outputs.RELEASE_ID }}"
           
-          # Create release directory
-          & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" "mkdir -p /var/www/project-management/releases/$env:RELEASE"
+          Write-Host "Creating release directory..."
+          # Create release directory with timeout
+          $sshArgs = @(
+            "-i", "$sshDir\deploy_key",
+            "-p", $env:STAGING_PORT,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=10",
+            "-o", "ServerAliveInterval=5",
+            "-o", "ServerAliveCountMax=3",
+            "$env:STAGING_USER@$env:STAGING_HOST",
+            "mkdir -p /var/www/project-management/releases/$env:RELEASE"
+          )
+          & ssh @sshArgs
+          if ($LASTEXITCODE -ne 0) { throw "Failed to create release directory" }
           
-          # Copy backend files using rsync (requires Git Bash or WSL)
-          $bashPath = "C:\Program Files\Git\bin\bash.exe"
-          if (Test-Path $bashPath) {
-            & $bashPath -c "rsync -avz -e `"ssh -i $sshDir/deploy_key -p $env:STAGING_PORT`" ./artifact/ $env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
-          } else {
-            # Fallback: use scp
-            & scp -i "$sshDir\deploy_key" -P $env:STAGING_PORT -r ./artifact/* "$env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
-          }
+          Write-Host "Copying files..."
+          # Copy backend files using scp (more reliable than rsync on Windows)
+          $scpArgs = @(
+            "-i", "$sshDir\deploy_key",
+            "-P", $env:STAGING_PORT,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=10",
+            "-r",
+            "./artifact/*"
+          )
+          $scpTarget = "$env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
+          & scp @scpArgs $scpTarget
+          if ($LASTEXITCODE -ne 0) { throw "Failed to copy files" }
           
+          Write-Host "Running migrations and switching symlink..."
           # Link shared .env and run migrations
           $deployScript = @"
-          cd /var/www/project-management/releases/$env:RELEASE
-          ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env
-          export NODE_ENV=staging
-          export RELEASE_ID=$env:RELEASE
-          npx prisma migrate deploy
-          ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
-          "@
-          $deployScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
+cd /var/www/project-management/releases/$env:RELEASE
+ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env
+export NODE_ENV=staging
+export RELEASE_ID=$env:RELEASE
+npx prisma migrate deploy
+ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
+"@
+          $sshDeployArgs = @(
+            "-i", "$sshDir\deploy_key",
+            "-p", $env:STAGING_PORT,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=10",
+            "-o", "ServerAliveInterval=5",
+            "-o", "ServerAliveCountMax=3",
+            "$env:STAGING_USER@$env:STAGING_HOST",
+            "bash"
+          )
+          $deployScript | & ssh @sshDeployArgs
+          if ($LASTEXITCODE -ne 0) { throw "Failed to deploy" }
+          
+          Write-Host "Deployment completed successfully"
 
       - name: Health check staging
         env:
@@ -215,28 +246,59 @@ jobs:
           
           $env:RELEASE = "${{ steps.release.outputs.RELEASE_ID }}"
           
-          # Create release directory
-          & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" "mkdir -p /var/www/project-management/releases/$env:RELEASE"
+          Write-Host "Creating release directory..."
+          # Create release directory with timeout
+          $sshArgs = @(
+            "-i", "$sshDir\deploy_key",
+            "-p", $env:PROD_PORT,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=10",
+            "-o", "ServerAliveInterval=5",
+            "-o", "ServerAliveCountMax=3",
+            "$env:PROD_USER@$env:PROD_HOST",
+            "mkdir -p /var/www/project-management/releases/$env:RELEASE"
+          )
+          & ssh @sshArgs
+          if ($LASTEXITCODE -ne 0) { throw "Failed to create release directory" }
           
-          # Copy backend files using rsync (requires Git Bash or WSL)
-          $bashPath = "C:\Program Files\Git\bin\bash.exe"
-          if (Test-Path $bashPath) {
-            & $bashPath -c "rsync -avz -e `"ssh -i $sshDir/deploy_key -p $env:PROD_PORT`" ./artifact/ $env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
-          } else {
-            # Fallback: use scp
-            & scp -i "$sshDir\deploy_key" -P $env:PROD_PORT -r ./artifact/* "$env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
-          }
+          Write-Host "Copying files..."
+          # Copy backend files using scp (more reliable than rsync on Windows)
+          $scpArgs = @(
+            "-i", "$sshDir\deploy_key",
+            "-P", $env:PROD_PORT,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=10",
+            "-r",
+            "./artifact/*"
+          )
+          $scpTarget = "$env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
+          & scp @scpArgs $scpTarget
+          if ($LASTEXITCODE -ne 0) { throw "Failed to copy files" }
           
+          Write-Host "Running migrations and switching symlink..."
           # Link shared .env and run migrations
           $deployScript = @"
-          cd /var/www/project-management/releases/$env:RELEASE
-          ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env
-          export NODE_ENV=production
-          export RELEASE_ID=$env:RELEASE
-          npx prisma migrate deploy
-          ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
-          "@
-          $deployScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
+cd /var/www/project-management/releases/$env:RELEASE
+ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env
+export NODE_ENV=production
+export RELEASE_ID=$env:RELEASE
+npx prisma migrate deploy
+ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
+"@
+          $sshDeployArgs = @(
+            "-i", "$sshDir\deploy_key",
+            "-p", $env:PROD_PORT,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "ConnectTimeout=10",
+            "-o", "ServerAliveInterval=5",
+            "-o", "ServerAliveCountMax=3",
+            "$env:PROD_USER@$env:PROD_HOST",
+            "bash"
+          )
+          $deployScript | & ssh @sshDeployArgs
+          if ($LASTEXITCODE -ne 0) { throw "Failed to deploy" }
+          
+          Write-Host "Deployment completed successfully"
 
       - name: Health check production
         env:
