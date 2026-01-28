@@ -86,8 +86,12 @@ jobs:
           if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
           # Save SSH key with proper format (no BOM, LF line endings)
-          $keyContent = $env:STAGING_SSH_KEY -replace "`r`n", "`n" -replace "`r", "`n"
-          [System.IO.File]::WriteAllText("$sshDir\deploy_key", $keyContent, [System.Text.UTF8Encoding]::new($false))
+          $keyContent = $env:STAGING_SSH_KEY
+          $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
+          $keyContent = $keyContent.TrimEnd("`n", "`r") + "`n"
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          $bytes = $utf8NoBom.GetBytes($keyContent)
+          [System.IO.File]::WriteAllBytes("$sshDir\deploy_key", $bytes)
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
           $env:RELEASE = "${{ steps.release.outputs.RELEASE_ID }}"
@@ -144,8 +148,12 @@ jobs:
           if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
           # Save SSH key with proper format (no BOM, LF line endings)
-          $keyContent = $env:STAGING_SSH_KEY -replace "`r`n", "`n" -replace "`r", "`n"
-          [System.IO.File]::WriteAllText("$sshDir\deploy_key", $keyContent, [System.Text.UTF8Encoding]::new($false))
+          $keyContent = $env:STAGING_SSH_KEY
+          $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
+          $keyContent = $keyContent.TrimEnd("`n", "`r") + "`n"
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          $bytes = $utf8NoBom.GetBytes($keyContent)
+          [System.IO.File]::WriteAllBytes("$sshDir\deploy_key", $bytes)
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
           $rollbackScript = @"
@@ -197,8 +205,12 @@ jobs:
           if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
           # Save SSH key with proper format (no BOM, LF line endings)
-          $keyContent = $env:PROD_SSH_KEY -replace "`r`n", "`n" -replace "`r", "`n"
-          [System.IO.File]::WriteAllText("$sshDir\deploy_key", $keyContent, [System.Text.UTF8Encoding]::new($false))
+          $keyContent = $env:PROD_SSH_KEY
+          $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
+          $keyContent = $keyContent.TrimEnd("`n", "`r") + "`n"
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          $bytes = $utf8NoBom.GetBytes($keyContent)
+          [System.IO.File]::WriteAllBytes("$sshDir\deploy_key", $bytes)
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
           $env:RELEASE = "${{ steps.release.outputs.RELEASE_ID }}"
@@ -255,8 +267,12 @@ jobs:
           if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
           # Save SSH key with proper format (no BOM, LF line endings)
-          $keyContent = $env:PROD_SSH_KEY -replace "`r`n", "`n" -replace "`r", "`n"
-          [System.IO.File]::WriteAllText("$sshDir\deploy_key", $keyContent, [System.Text.UTF8Encoding]::new($false))
+          $keyContent = $env:PROD_SSH_KEY
+          $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
+          $keyContent = $keyContent.TrimEnd("`n", "`r") + "`n"
+          $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+          $bytes = $utf8NoBom.GetBytes($keyContent)
+          [System.IO.File]::WriteAllBytes("$sshDir\deploy_key", $bytes)
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
           $rollbackScript = @"
