@@ -79,6 +79,7 @@ jobs:
           STAGING_HOST: ${{ secrets.STAGING_HOST }}
           STAGING_USER: ${{ secrets.STAGING_USER }}
           STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_PORT: "2222"
         shell: pwsh
         run: |
           $sshDir = "$env:USERPROFILE\.ssh"
@@ -90,15 +91,15 @@ jobs:
           $env:RELEASE = "${{ steps.release.outputs.RELEASE_ID }}"
           
           # Create release directory
-          & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" "mkdir -p /var/www/project-management/releases/$env:RELEASE"
+          & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" "mkdir -p /var/www/project-management/releases/$env:RELEASE"
           
           # Copy backend files using rsync (requires Git Bash or WSL)
           $bashPath = "C:\Program Files\Git\bin\bash.exe"
           if (Test-Path $bashPath) {
-            & $bashPath -c "rsync -avz -e `"ssh -i $sshDir/deploy_key`" ./artifact/ $env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
+            & $bashPath -c "rsync -avz -e `"ssh -i $sshDir/deploy_key -p $env:STAGING_PORT`" ./artifact/ $env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
           } else {
             # Fallback: use scp
-            & scp -i "$sshDir\deploy_key" -r ./artifact/* "$env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
+            & scp -i "$sshDir\deploy_key" -P $env:STAGING_PORT -r ./artifact/* "$env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
           }
           
           # Link shared .env and run migrations
@@ -110,7 +111,7 @@ jobs:
           npx prisma migrate deploy
           ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
           "@
-          $deployScript | & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
+          $deployScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
 
       - name: Health check staging
         env:
@@ -134,6 +135,7 @@ jobs:
           STAGING_HOST: ${{ secrets.STAGING_HOST }}
           STAGING_USER: ${{ secrets.STAGING_USER }}
           STAGING_SSH_KEY: ${{ secrets.STAGING_SSH_KEY }}
+          STAGING_PORT: "2222"
         shell: pwsh
         run: |
           $sshDir = "$env:USERPROFILE\.ssh"
@@ -152,7 +154,7 @@ jobs:
             exit 1
           fi
           "@
-          $rollbackScript | & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
+          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
 
   deploy_production:
     name: Deploy to Production
@@ -184,6 +186,7 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_PORT: "2223"
         shell: pwsh
         run: |
           $sshDir = "$env:USERPROFILE\.ssh"
@@ -195,15 +198,15 @@ jobs:
           $env:RELEASE = "${{ steps.release.outputs.RELEASE_ID }}"
           
           # Create release directory
-          & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" "mkdir -p /var/www/project-management/releases/$env:RELEASE"
+          & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" "mkdir -p /var/www/project-management/releases/$env:RELEASE"
           
           # Copy backend files using rsync (requires Git Bash or WSL)
           $bashPath = "C:\Program Files\Git\bin\bash.exe"
           if (Test-Path $bashPath) {
-            & $bashPath -c "rsync -avz -e `"ssh -i $sshDir/deploy_key`" ./artifact/ $env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
+            & $bashPath -c "rsync -avz -e `"ssh -i $sshDir/deploy_key -p $env:PROD_PORT`" ./artifact/ $env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
           } else {
             # Fallback: use scp
-            & scp -i "$sshDir\deploy_key" -r ./artifact/* "$env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
+            & scp -i "$sshDir\deploy_key" -P $env:PROD_PORT -r ./artifact/* "$env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
           }
           
           # Link shared .env and run migrations
@@ -215,7 +218,7 @@ jobs:
           npx prisma migrate deploy
           ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
           "@
-          $deployScript | & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
+          $deployScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
 
       - name: Health check production
         env:
@@ -239,6 +242,7 @@ jobs:
           PROD_HOST: ${{ secrets.PROD_HOST }}
           PROD_USER: ${{ secrets.PROD_USER }}
           PROD_SSH_KEY: ${{ secrets.PROD_SSH_KEY }}
+          PROD_PORT: "2223"
         shell: pwsh
         run: |
           $sshDir = "$env:USERPROFILE\.ssh"
@@ -257,4 +261,4 @@ jobs:
             exit 1
           fi
           "@
-          $rollbackScript | & ssh -i "$sshDir\deploy_key" -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
+          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
