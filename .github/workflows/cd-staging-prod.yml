@@ -102,6 +102,9 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-p", $env:STAGING_PORT,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
@@ -117,6 +120,9 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-P", $env:STAGING_PORT,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
             "-r",
             "./artifact/*"
@@ -137,6 +143,9 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-p", $env:STAGING_PORT,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
@@ -193,7 +202,7 @@ jobs:
             "  echo \"No previous release found for rollback\"`n" +
             "  exit 1`n" +
             "fi`n"
-          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
+          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$env:STAGING_USER@$env:STAGING_HOST" bash
 
   deploy_production:
     name: Deploy to Production
@@ -248,6 +257,9 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-p", $env:PROD_PORT,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
@@ -263,6 +275,9 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-P", $env:PROD_PORT,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
             "-r",
             "./artifact/*"
@@ -283,6 +298,9 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-p", $env:PROD_PORT,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
@@ -339,4 +357,4 @@ jobs:
             "  echo \"No previous release found for rollback\"`n" +
             "  exit 1`n" +
             "fi`n"
-          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
+          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$env:PROD_USER@$env:PROD_HOST" bash
