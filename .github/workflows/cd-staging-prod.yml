@@ -85,6 +85,18 @@ jobs:
           $sshDir = "$env:USERPROFILE\.ssh"
           if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
+          # Normalize host/user (avoid values like "user@host" or "host:2222" in secrets)
+          $remoteHost = ($env:STAGING_HOST ?? "").Trim()
+          if ($remoteHost.Contains("@")) { $remoteHost = $remoteHost.Split("@")[-1] }
+          if ($remoteHost.Contains(":")) { $remoteHost = $remoteHost.Split(":")[0] }
+          if ([string]::IsNullOrWhiteSpace($remoteHost)) { throw "STAGING_HOST is empty/invalid" }
+          
+          $remoteUser = ($env:STAGING_USER ?? "").Trim()
+          if ($remoteUser.Contains("@")) { $remoteUser = $remoteUser.Split("@")[0] }
+          if ([string]::IsNullOrWhiteSpace($remoteUser)) { throw "STAGING_USER is empty/invalid" }
+          
+          $remote = "$remoteUser@$remoteHost"
+          
           # Save SSH key with proper format (no BOM, LF line endings)
           $keyContent = $env:STAGING_SSH_KEY
           $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
@@ -108,7 +120,7 @@ jobs:
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
-            "$env:STAGING_USER@$env:STAGING_HOST",
+            $remote,
             "mkdir -p /var/www/project-management/releases/$env:RELEASE"
           )
           & ssh @sshArgs
@@ -125,9 +137,9 @@ jobs:
             "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
             "-r",
-            "./artifact/*"
+            "./artifact/."
           )
-          $scpTarget = "$env:STAGING_USER@$env:STAGING_HOST:/var/www/project-management/releases/$env:RELEASE/"
+          $scpTarget = "${remote}:/var/www/project-management/releases/$env:RELEASE/"
           & scp @scpArgs $scpTarget
           if ($LASTEXITCODE -ne 0) { throw "Failed to copy files" }
           
@@ -149,7 +161,7 @@ jobs:
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
-            "$env:STAGING_USER@$env:STAGING_HOST",
+            $remote,
             "bash"
           )
           $deployScript | & ssh @sshDeployArgs
@@ -185,6 +197,17 @@ jobs:
           $sshDir = "$env:USERPROFILE\.ssh"
           if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
+          $remoteHost = ($env:STAGING_HOST ?? "").Trim()
+          if ($remoteHost.Contains("@")) { $remoteHost = $remoteHost.Split("@")[-1] }
+          if ($remoteHost.Contains(":")) { $remoteHost = $remoteHost.Split(":")[0] }
+          if ([string]::IsNullOrWhiteSpace($remoteHost)) { throw "STAGING_HOST is empty/invalid" }
+          
+          $remoteUser = ($env:STAGING_USER ?? "").Trim()
+          if ($remoteUser.Contains("@")) { $remoteUser = $remoteUser.Split("@")[0] }
+          if ([string]::IsNullOrWhiteSpace($remoteUser)) { throw "STAGING_USER is empty/invalid" }
+          
+          $remote = "$remoteUser@$remoteHost"
+          
           # Save SSH key with proper format (no BOM, LF line endings)
           $keyContent = $env:STAGING_SSH_KEY
           $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
@@ -202,7 +225,7 @@ jobs:
             "  echo \"No previous release found for rollback\"`n" +
             "  exit 1`n" +
             "fi`n"
-          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$env:STAGING_USER@$env:STAGING_HOST" bash
+          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote bash
 
   deploy_production:
     name: Deploy to Production
@@ -240,6 +263,17 @@ jobs:
           $sshDir = "$env:USERPROFILE\.ssh"
           if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
+          $remoteHost = ($env:PROD_HOST ?? "").Trim()
+          if ($remoteHost.Contains("@")) { $remoteHost = $remoteHost.Split("@")[-1] }
+          if ($remoteHost.Contains(":")) { $remoteHost = $remoteHost.Split(":")[0] }
+          if ([string]::IsNullOrWhiteSpace($remoteHost)) { throw "PROD_HOST is empty/invalid" }
+          
+          $remoteUser = ($env:PROD_USER ?? "").Trim()
+          if ($remoteUser.Contains("@")) { $remoteUser = $remoteUser.Split("@")[0] }
+          if ([string]::IsNullOrWhiteSpace($remoteUser)) { throw "PROD_USER is empty/invalid" }
+          
+          $remote = "$remoteUser@$remoteHost"
+          
           # Save SSH key with proper format (no BOM, LF line endings)
           $keyContent = $env:PROD_SSH_KEY
           $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
@@ -263,7 +297,7 @@ jobs:
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
-            "$env:PROD_USER@$env:PROD_HOST",
+            $remote,
             "mkdir -p /var/www/project-management/releases/$env:RELEASE"
           )
           & ssh @sshArgs
@@ -280,9 +314,9 @@ jobs:
             "-o", "PreferredAuthentications=publickey",
             "-o", "ConnectTimeout=10",
             "-r",
-            "./artifact/*"
+            "./artifact/."
           )
-          $scpTarget = "$env:PROD_USER@$env:PROD_HOST:/var/www/project-management/releases/$env:RELEASE/"
+          $scpTarget = "${remote}:/var/www/project-management/releases/$env:RELEASE/"
           & scp @scpArgs $scpTarget
           if ($LASTEXITCODE -ne 0) { throw "Failed to copy files" }
           
@@ -304,7 +338,7 @@ jobs:
             "-o", "ConnectTimeout=10",
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
-            "$env:PROD_USER@$env:PROD_HOST",
+            $remote,
             "bash"
           )
           $deployScript | & ssh @sshDeployArgs
@@ -340,6 +374,17 @@ jobs:
           $sshDir = "$env:USERPROFILE\.ssh"
           if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
           
+          $remoteHost = ($env:PROD_HOST ?? "").Trim()
+          if ($remoteHost.Contains("@")) { $remoteHost = $remoteHost.Split("@")[-1] }
+          if ($remoteHost.Contains(":")) { $remoteHost = $remoteHost.Split(":")[0] }
+          if ([string]::IsNullOrWhiteSpace($remoteHost)) { throw "PROD_HOST is empty/invalid" }
+          
+          $remoteUser = ($env:PROD_USER ?? "").Trim()
+          if ($remoteUser.Contains("@")) { $remoteUser = $remoteUser.Split("@")[0] }
+          if ([string]::IsNullOrWhiteSpace($remoteUser)) { throw "PROD_USER is empty/invalid" }
+          
+          $remote = "$remoteUser@$remoteHost"
+          
           # Save SSH key with proper format (no BOM, LF line endings)
           $keyContent = $env:PROD_SSH_KEY
           $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
@@ -357,4 +402,4 @@ jobs:
             "  echo \"No previous release found for rollback\"`n" +
             "  exit 1`n" +
             "fi`n"
-          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 "$env:PROD_USER@$env:PROD_HOST" bash
+          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote bash
