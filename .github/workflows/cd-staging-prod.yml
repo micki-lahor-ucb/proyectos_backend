@@ -189,7 +189,7 @@ jobs:
             'cd /var/www/project-management/current',
             'if [ -f ".env" ]; then set -a; . ./.env; set +a; fi',
             'export NODE_ENV=staging',
-            "export RELEASE_ID=\"$env:RELEASE\"",
+            "export RELEASE_ID=`"$env:RELEASE`"",
             'nohup node dist/main.js > /var/www/project-management/shared/logs/out.log 2> /var/www/project-management/shared/logs/error.log &',
             'echo $! > "$PIDFILE"',
             'echo "Started API with PID $(cat "$PIDFILE")"'
@@ -436,7 +436,7 @@ jobs:
             'cd /var/www/project-management/current',
             'if [ -f ".env" ]; then set -a; . ./.env; set +a; fi',
             'export NODE_ENV=production',
-            "export RELEASE_ID=\"$env:RELEASE\"",
+            "export RELEASE_ID=`"$env:RELEASE`"",
             'nohup node dist/main.js > /var/www/project-management/shared/logs/out.log 2> /var/www/project-management/shared/logs/error.log &',
             'echo $! > "$PIDFILE"',
             'echo "Started API with PID $(cat "$PIDFILE")"'
