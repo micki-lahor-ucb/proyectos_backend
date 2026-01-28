@@ -127,14 +127,12 @@ jobs:
           
           Write-Host "Running migrations and switching symlink..."
           # Link shared .env and run migrations
-          $deployScript = @"
-cd /var/www/project-management/releases/$env:RELEASE
-ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env
-export NODE_ENV=staging
-export RELEASE_ID=$env:RELEASE
-npx prisma migrate deploy
-ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
-"@
+          $deployScript = "cd /var/www/project-management/releases/$env:RELEASE`n" +
+            "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env`n" +
+            "export NODE_ENV=staging`n" +
+            "export RELEASE_ID=$env:RELEASE`n" +
+            "npx prisma migrate deploy`n" +
+            "ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current`n"
           $sshDeployArgs = @(
             "-i", "$sshDir\deploy_key",
             "-p", $env:STAGING_PORT,
@@ -187,16 +185,14 @@ ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-manag
           [System.IO.File]::WriteAllBytes("$sshDir\deploy_key", $bytes)
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
-          $rollbackScript = @"
-          PREV=`$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')
-          if [ -n "`$PREV" ]; then
-            echo "Rolling back to: `$PREV"
-            ln -sfn `$PREV /var/www/project-management/current
-          else
-            echo "No previous release found for rollback"
-            exit 1
-          fi
-          "@
+          $rollbackScript = "PREV=`$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')`n" +
+            "if [ -n \"`$PREV\" ]; then`n" +
+            "  echo \"Rolling back to: `$PREV\"`n" +
+            "  ln -sfn `$PREV /var/www/project-management/current`n" +
+            "else`n" +
+            "  echo \"No previous release found for rollback\"`n" +
+            "  exit 1`n" +
+            "fi`n"
           $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no "$env:STAGING_USER@$env:STAGING_HOST" bash
 
   deploy_production:
@@ -277,14 +273,12 @@ ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-manag
           
           Write-Host "Running migrations and switching symlink..."
           # Link shared .env and run migrations
-          $deployScript = @"
-cd /var/www/project-management/releases/$env:RELEASE
-ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env
-export NODE_ENV=production
-export RELEASE_ID=$env:RELEASE
-npx prisma migrate deploy
-ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current
-"@
+          $deployScript = "cd /var/www/project-management/releases/$env:RELEASE`n" +
+            "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env`n" +
+            "export NODE_ENV=production`n" +
+            "export RELEASE_ID=$env:RELEASE`n" +
+            "npx prisma migrate deploy`n" +
+            "ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current`n"
           $sshDeployArgs = @(
             "-i", "$sshDir\deploy_key",
             "-p", $env:PROD_PORT,
@@ -337,14 +331,12 @@ ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-manag
           [System.IO.File]::WriteAllBytes("$sshDir\deploy_key", $bytes)
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
-          $rollbackScript = @"
-          PREV=`$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')
-          if [ -n "`$PREV" ]; then
-            echo "Rolling back to: `$PREV"
-            ln -sfn `$PREV /var/www/project-management/current
-          else
-            echo "No previous release found for rollback"
-            exit 1
-          fi
-          "@
+          $rollbackScript = "PREV=`$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')`n" +
+            "if [ -n \"`$PREV\" ]; then`n" +
+            "  echo \"Rolling back to: `$PREV\"`n" +
+            "  ln -sfn `$PREV /var/www/project-management/current`n" +
+            "else`n" +
+            "  echo \"No previous release found for rollback\"`n" +
+            "  exit 1`n" +
+            "fi`n"
           $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no "$env:PROD_USER@$env:PROD_HOST" bash
