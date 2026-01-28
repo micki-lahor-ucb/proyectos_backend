@@ -178,12 +178,21 @@ jobs:
             '',
             "ln -sfn `"/var/www/project-management/releases/$env:RELEASE`" /var/www/project-management/current",
             '',
-            '# Start or restart the app with pm2 (best-effort for local staging container)',
-            'cd /var/www/project-management/current',
-            'if ! command -v pm2 >/dev/null 2>&1; then',
-            '  npm i -g pm2',
+            '# Start/restart app without global installs (no pm2)',
+            'mkdir -p /var/www/project-management/shared/logs /var/www/project-management/shared/run',
+            'PIDFILE=/var/www/project-management/shared/run/api.pid',
+            'if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then',
+            '  echo "Stopping previous process $(cat "$PIDFILE")"',
+            '  kill "$(cat "$PIDFILE")" || true',
+            '  sleep 1',
             'fi',
-            'pm2 start dist/main.js --name project-management-api --update-env --time || pm2 restart project-management-api --update-env'
+            'cd /var/www/project-management/current',
+            'if [ -f ".env" ]; then set -a; . ./.env; set +a; fi',
+            'export NODE_ENV=staging',
+            "export RELEASE_ID=\"$env:RELEASE\"",
+            'nohup node dist/main.js > /var/www/project-management/shared/logs/out.log 2> /var/www/project-management/shared/logs/error.log &',
+            'echo $! > "$PIDFILE"',
+            'echo "Started API with PID $(cat "$PIDFILE")"'
           ) -join "`n"
           $deployContent += "`n"
           # Ensure LF endings and no BOM
@@ -285,7 +294,7 @@ jobs:
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
           # Execute rollback remotely (avoid piping CRLF)
-          $rollbackCmd = "bash -lc 'set -e; PREV=$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n \"2p\" | tr -d \"/\"); if [ -n \"$PREV\" ]; then echo \"Rolling back to: $PREV\"; ln -sfn \"$PREV\" /var/www/project-management/current; if command -v pm2 >/dev/null 2>&1; then pm2 restart project-management-api --update-env || true; fi; else echo \"No previous release found for rollback\"; exit 1; fi'"
+          $rollbackCmd = "bash -lc 'set -euo pipefail; PREV=$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n \"2p\" | tr -d \"/\"); if [ -n \"$PREV\" ]; then echo \"Rolling back to: $PREV\"; ln -sfn \"$PREV\" /var/www/project-management/current; mkdir -p /var/www/project-management/shared/logs /var/www/project-management/shared/run; PIDFILE=/var/www/project-management/shared/run/api.pid; if [ -f \"$PIDFILE\" ] && kill -0 \"$(cat \"$PIDFILE\")\" 2>/dev/null; then kill \"$(cat \"$PIDFILE\")\" || true; sleep 1; fi; cd /var/www/project-management/current; if [ -f .env ]; then set -a; . ./.env; set +a; fi; export NODE_ENV=staging; CUR=$(readlink -f /var/www/project-management/current); export RELEASE_ID=$(basename \"$CUR\"); nohup node dist/main.js > /var/www/project-management/shared/logs/out.log 2> /var/www/project-management/shared/logs/error.log & echo $! > \"$PIDFILE\"; echo \"Rollback started PID $(cat \"$PIDFILE\")\"; else echo \"No previous release found for rollback\"; exit 1; fi'"
           & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote $rollbackCmd
 
   deploy_production:
@@ -416,12 +425,21 @@ jobs:
             '',
             "ln -sfn `"/var/www/project-management/releases/$env:RELEASE`" /var/www/project-management/current",
             '',
-            '# Start or restart the app with pm2',
-            'cd /var/www/project-management/current',
-            'if ! command -v pm2 >/dev/null 2>&1; then',
-            '  npm i -g pm2',
+            '# Start/restart app without global installs (no pm2)',
+            'mkdir -p /var/www/project-management/shared/logs /var/www/project-management/shared/run',
+            'PIDFILE=/var/www/project-management/shared/run/api.pid',
+            'if [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then',
+            '  echo "Stopping previous process $(cat "$PIDFILE")"',
+            '  kill "$(cat "$PIDFILE")" || true',
+            '  sleep 1',
             'fi',
-            'pm2 start dist/main.js --name project-management-api --update-env --time || pm2 restart project-management-api --update-env'
+            'cd /var/www/project-management/current',
+            'if [ -f ".env" ]; then set -a; . ./.env; set +a; fi',
+            'export NODE_ENV=production',
+            "export RELEASE_ID=\"$env:RELEASE\"",
+            'nohup node dist/main.js > /var/www/project-management/shared/logs/out.log 2> /var/www/project-management/shared/logs/error.log &',
+            'echo $! > "$PIDFILE"',
+            'echo "Started API with PID $(cat "$PIDFILE")"'
           ) -join "`n"
           $deployContent += "`n"
           # Ensure LF endings and no BOM
@@ -523,5 +541,5 @@ jobs:
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
           # Execute rollback remotely (avoid piping CRLF)
-          $rollbackCmd = "bash -lc 'set -e; PREV=$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n \"2p\" | tr -d \"/\"); if [ -n \"$PREV\" ]; then echo \"Rolling back to: $PREV\"; ln -sfn \"$PREV\" /var/www/project-management/current; if command -v pm2 >/dev/null 2>&1; then pm2 restart project-management-api --update-env || true; fi; else echo \"No previous release found for rollback\"; exit 1; fi'"
+          $rollbackCmd = "bash -lc 'set -euo pipefail; PREV=$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n \"2p\" | tr -d \"/\"); if [ -n \"$PREV\" ]; then echo \"Rolling back to: $PREV\"; ln -sfn \"$PREV\" /var/www/project-management/current; mkdir -p /var/www/project-management/shared/logs /var/www/project-management/shared/run; PIDFILE=/var/www/project-management/shared/run/api.pid; if [ -f \"$PIDFILE\" ] && kill -0 \"$(cat \"$PIDFILE\")\" 2>/dev/null; then kill \"$(cat \"$PIDFILE\")\" || true; sleep 1; fi; cd /var/www/project-management/current; if [ -f .env ]; then set -a; . ./.env; set +a; fi; export NODE_ENV=production; CUR=$(readlink -f /var/www/project-management/current); export RELEASE_ID=$(basename \"$CUR\"); nohup node dist/main.js > /var/www/project-management/shared/logs/out.log 2> /var/www/project-management/shared/logs/error.log & echo $! > \"$PIDFILE\"; echo \"Rollback started PID $(cat \"$PIDFILE\")\"; else echo \"No previous release found for rollback\"; exit 1; fi'"
           & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote $rollbackCmd
