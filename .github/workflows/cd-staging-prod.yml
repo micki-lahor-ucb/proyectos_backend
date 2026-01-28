@@ -163,12 +163,13 @@ jobs:
             'export NODE_ENV=staging',
             "export RELEASE_ID=`"$env:RELEASE`"",
             '',
-            'if [ -x "./node_modules/.bin/prisma" ]; then',
-            '  ./node_modules/.bin/prisma migrate deploy',
-            'elif command -v npx >/dev/null 2>&1; then',
-            '  npx prisma migrate deploy',
+            'echo "Node version:"',
+            'node -v || true',
+            'node -e "const major=parseInt(process.versions.node.split(`.`)[0],10); if(major<18){console.error(`Node >=18 required for Prisma`); process.exit(1)}" ',
+            'if [ -f "./node_modules/prisma/build/index.js" ]; then',
+            '  node ./node_modules/prisma/build/index.js migrate deploy',
             'else',
-            '  echo "Prisma CLI not found (no local prisma, no npx)" >&2',
+            '  echo "Prisma package not found in node_modules (node_modules/prisma/build/index.js missing)" >&2',
             '  exit 1',
             'fi',
             '',
@@ -227,7 +228,14 @@ jobs:
         shell: pwsh
         run: |
           Start-Sleep -Seconds 5
-          $response = Invoke-WebRequest -Uri "$env:STAGING_APP_URL/api/health" -UseBasicParsing
+          $base = ($env:STAGING_APP_URL ?? "").TrimEnd("/")
+          if ($base.EndsWith("/api")) {
+            $url = "$base/health"
+          } else {
+            $url = "$base/api/health"
+          }
+          Write-Host "Health check URL: $url"
+          $response = Invoke-WebRequest -Uri $url -UseBasicParsing
           if ($response.StatusCode -ne 200) { exit 1 }
 
   rollback_staging:
@@ -386,12 +394,13 @@ jobs:
             'export NODE_ENV=production',
             "export RELEASE_ID=`"$env:RELEASE`"",
             '',
-            'if [ -x "./node_modules/.bin/prisma" ]; then',
-            '  ./node_modules/.bin/prisma migrate deploy',
-            'elif command -v npx >/dev/null 2>&1; then',
-            '  npx prisma migrate deploy',
+            'echo "Node version:"',
+            'node -v || true',
+            'node -e "const major=parseInt(process.versions.node.split(`.`)[0],10); if(major<18){console.error(`Node >=18 required for Prisma`); process.exit(1)}" ',
+            'if [ -f "./node_modules/prisma/build/index.js" ]; then',
+            '  node ./node_modules/prisma/build/index.js migrate deploy',
             'else',
-            '  echo "Prisma CLI not found (no local prisma, no npx)" >&2',
+            '  echo "Prisma package not found in node_modules (node_modules/prisma/build/index.js missing)" >&2',
             '  exit 1',
             'fi',
             '',
@@ -450,7 +459,14 @@ jobs:
         shell: pwsh
         run: |
           Start-Sleep -Seconds 5
-          $response = Invoke-WebRequest -Uri "$env:PROD_APP_URL/api/health" -UseBasicParsing
+          $base = ($env:PROD_APP_URL ?? "").TrimEnd("/")
+          if ($base.EndsWith("/api")) {
+            $url = "$base/health"
+          } else {
+            $url = "$base/api/health"
+          }
+          Write-Host "Health check URL: $url"
+          $response = Invoke-WebRequest -Uri $url -UseBasicParsing
           if ($response.StatusCode -ne 200) { exit 1 }
 
   rollback_production:
