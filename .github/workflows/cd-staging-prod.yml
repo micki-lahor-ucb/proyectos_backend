@@ -129,11 +129,12 @@ jobs:
           Write-Host "Copying files..."
           # Pack + copy a single file (much faster than recursive scp for node_modules)
           $archive = "artifact-$env:RELEASE.tgz"
+          $remoteArchivePath = "/var/www/project-management/releases/$env:RELEASE/$archive"
           if (Test-Path $archive) { Remove-Item -Force $archive }
           & tar -czf $archive -C ./artifact .
           if ($LASTEXITCODE -ne 0) { throw "Failed to create tar.gz archive" }
 
-          # Copy archive
+          # Copy archive (single file)
           $scpArgs = @(
             "-i", "$sshDir\deploy_key",
             "-P", $env:STAGING_PORT,
@@ -149,16 +150,58 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Failed to copy files" }
           
           Write-Host "Running migrations and switching symlink..."
-          # Link shared .env and run migrations
-          $deployScript = "cd /var/www/project-management/releases/$env:RELEASE`n" +
-            "tar -xzf $archive -C /var/www/project-management/releases/$env:RELEASE`n" +
-            "rm -f $archive`n" +
-            "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env`n" +
-            "export NODE_ENV=staging`n" +
-            "export RELEASE_ID=$env:RELEASE`n" +
-            "npx prisma migrate deploy`n" +
-            "ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current`n"
-          $sshDeployArgs = @(
+          # Run a remote deploy script (avoid CRLF issues when piping from PowerShell)
+          $deploySh = "deploy-$env:RELEASE.sh"
+          $remoteDeploySh = "/var/www/project-management/releases/$env:RELEASE/$deploySh"
+          $deployContent = @"
+set -euo pipefail
+cd "/var/www/project-management/releases/$env:RELEASE"
+tar -xzf "$archive"
+rm -f "$archive"
+ln -sfn /var/www/project-management/shared/.env .env
+
+export NODE_ENV=staging
+export RELEASE_ID="$env:RELEASE"
+
+if [ -x "./node_modules/.bin/prisma" ]; then
+  ./node_modules/.bin/prisma migrate deploy
+elif command -v npx >/dev/null 2>&1; then
+  npx prisma migrate deploy
+else
+  echo "Prisma CLI not found (no local prisma, no npx)" >&2
+  exit 1
+fi
+
+ln -sfn "/var/www/project-management/releases/$env:RELEASE" /var/www/project-management/current
+
+# Start or restart the app with pm2 (best-effort for local staging container)
+cd /var/www/project-management/current
+if ! command -v pm2 >/dev/null 2>&1; then
+  npm i -g pm2
+fi
+pm2 start dist/main.js --name project-management-api --update-env --time || pm2 restart project-management-api --update-env
+"@
+          # Ensure LF endings and no BOM
+          $deployContent = $deployContent -replace "`r`n", "`n" -replace "`r", "`n"
+          $utf8NoBom2 = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllBytes($deploySh, $utf8NoBom2.GetBytes($deployContent))
+
+          # Copy deploy script
+          $scpScriptArgs = @(
+            "-i", "$sshDir\deploy_key",
+            "-P", $env:STAGING_PORT,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "PreferredAuthentications=publickey",
+            "-o", "ConnectTimeout=10",
+            $deploySh
+          )
+          & scp @scpScriptArgs "${remote}:/var/www/project-management/releases/$env:RELEASE/"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to copy deploy script" }
+
+          # Execute deploy script remotely
+          $sshRunArgs = @(
             "-i", "$sshDir\deploy_key",
             "-p", $env:STAGING_PORT,
             "-o", "StrictHostKeyChecking=no",
@@ -169,10 +212,11 @@ jobs:
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
             $remote,
-            "bash"
+            "bash $remoteDeploySh"
           )
-          $deployScript | & ssh @sshDeployArgs
+          & ssh @sshRunArgs
           if ($LASTEXITCODE -ne 0) { throw "Failed to deploy" }
+          Remove-Item -Force $deploySh -ErrorAction SilentlyContinue
           
           Write-Host "Deployment completed successfully"
 
@@ -224,15 +268,9 @@ jobs:
           [System.IO.File]::WriteAllBytes("$sshDir\deploy_key", $bytes)
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
-          $rollbackScript = "PREV=`$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')`n" +
-            "if [ -n \"`$PREV\" ]; then`n" +
-            "  echo \"Rolling back to: `$PREV\"`n" +
-            "  ln -sfn `$PREV /var/www/project-management/current`n" +
-            "else`n" +
-            "  echo \"No previous release found for rollback\"`n" +
-            "  exit 1`n" +
-            "fi`n"
-          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote bash
+          # Execute rollback remotely (avoid piping CRLF)
+          $rollbackCmd = "bash -lc 'set -e; PREV=$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n \"2p\" | tr -d \"/\"); if [ -n \"$PREV\" ]; then echo \"Rolling back to: $PREV\"; ln -sfn \"$PREV\" /var/www/project-management/current; if command -v pm2 >/dev/null 2>&1; then pm2 restart project-management-api --update-env || true; fi; else echo \"No previous release found for rollback\"; exit 1; fi'"
+          & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote $rollbackCmd
 
   deploy_production:
     name: Deploy to Production
@@ -313,11 +351,12 @@ jobs:
           Write-Host "Copying files..."
           # Pack + copy a single file (much faster than recursive scp for node_modules)
           $archive = "artifact-$env:RELEASE.tgz"
+          $remoteArchivePath = "/var/www/project-management/releases/$env:RELEASE/$archive"
           if (Test-Path $archive) { Remove-Item -Force $archive }
           & tar -czf $archive -C ./artifact .
           if ($LASTEXITCODE -ne 0) { throw "Failed to create tar.gz archive" }
 
-          # Copy archive
+          # Copy archive (single file)
           $scpArgs = @(
             "-i", "$sshDir\deploy_key",
             "-P", $env:PROD_PORT,
@@ -333,16 +372,58 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Failed to copy files" }
           
           Write-Host "Running migrations and switching symlink..."
-          # Link shared .env and run migrations
-          $deployScript = "cd /var/www/project-management/releases/$env:RELEASE`n" +
-            "tar -xzf $archive -C /var/www/project-management/releases/$env:RELEASE`n" +
-            "rm -f $archive`n" +
-            "ln -sfn /var/www/project-management/shared/.env /var/www/project-management/releases/$env:RELEASE/.env`n" +
-            "export NODE_ENV=production`n" +
-            "export RELEASE_ID=$env:RELEASE`n" +
-            "npx prisma migrate deploy`n" +
-            "ln -sfn /var/www/project-management/releases/$env:RELEASE /var/www/project-management/current`n"
-          $sshDeployArgs = @(
+          # Run a remote deploy script (avoid CRLF issues when piping from PowerShell)
+          $deploySh = "deploy-$env:RELEASE.sh"
+          $remoteDeploySh = "/var/www/project-management/releases/$env:RELEASE/$deploySh"
+          $deployContent = @"
+set -euo pipefail
+cd "/var/www/project-management/releases/$env:RELEASE"
+tar -xzf "$archive"
+rm -f "$archive"
+ln -sfn /var/www/project-management/shared/.env .env
+
+export NODE_ENV=production
+export RELEASE_ID="$env:RELEASE"
+
+if [ -x "./node_modules/.bin/prisma" ]; then
+  ./node_modules/.bin/prisma migrate deploy
+elif command -v npx >/dev/null 2>&1; then
+  npx prisma migrate deploy
+else
+  echo "Prisma CLI not found (no local prisma, no npx)" >&2
+  exit 1
+fi
+
+ln -sfn "/var/www/project-management/releases/$env:RELEASE" /var/www/project-management/current
+
+# Start or restart the app with pm2
+cd /var/www/project-management/current
+if ! command -v pm2 >/dev/null 2>&1; then
+  npm i -g pm2
+fi
+pm2 start dist/main.js --name project-management-api --update-env --time || pm2 restart project-management-api --update-env
+"@
+          # Ensure LF endings and no BOM
+          $deployContent = $deployContent -replace "`r`n", "`n" -replace "`r", "`n"
+          $utf8NoBom2 = New-Object System.Text.UTF8Encoding $false
+          [System.IO.File]::WriteAllBytes($deploySh, $utf8NoBom2.GetBytes($deployContent))
+
+          # Copy deploy script
+          $scpScriptArgs = @(
+            "-i", "$sshDir\deploy_key",
+            "-P", $env:PROD_PORT,
+            "-o", "StrictHostKeyChecking=no",
+            "-o", "BatchMode=yes",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "PreferredAuthentications=publickey",
+            "-o", "ConnectTimeout=10",
+            $deploySh
+          )
+          & scp @scpScriptArgs "${remote}:/var/www/project-management/releases/$env:RELEASE/"
+          if ($LASTEXITCODE -ne 0) { throw "Failed to copy deploy script" }
+
+          # Execute deploy script remotely
+          $sshRunArgs = @(
             "-i", "$sshDir\deploy_key",
             "-p", $env:PROD_PORT,
             "-o", "StrictHostKeyChecking=no",
@@ -353,10 +434,11 @@ jobs:
             "-o", "ServerAliveInterval=5",
             "-o", "ServerAliveCountMax=3",
             $remote,
-            "bash"
+            "bash $remoteDeploySh"
           )
-          $deployScript | & ssh @sshDeployArgs
+          & ssh @sshRunArgs
           if ($LASTEXITCODE -ne 0) { throw "Failed to deploy" }
+          Remove-Item -Force $deploySh -ErrorAction SilentlyContinue
           
           Write-Host "Deployment completed successfully"
 
@@ -408,12 +490,6 @@ jobs:
           [System.IO.File]::WriteAllBytes("$sshDir\deploy_key", $bytes)
           icacls "$sshDir\deploy_key" /inheritance:r /grant "$env:USERNAME`:F" | Out-Null
           
-          $rollbackScript = "PREV=`$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n '2p' | tr -d '/')`n" +
-            "if [ -n \"`$PREV\" ]; then`n" +
-            "  echo \"Rolling back to: `$PREV\"`n" +
-            "  ln -sfn `$PREV /var/www/project-management/current`n" +
-            "else`n" +
-            "  echo \"No previous release found for rollback\"`n" +
-            "  exit 1`n" +
-            "fi`n"
-          $rollbackScript | & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote bash
+          # Execute rollback remotely (avoid piping CRLF)
+          $rollbackCmd = "bash -lc 'set -e; PREV=$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n \"2p\" | tr -d \"/\"); if [ -n \"$PREV\" ]; then echo \"Rolling back to: $PREV\"; ln -sfn \"$PREV\" /var/www/project-management/current; if command -v pm2 >/dev/null 2>&1; then pm2 restart project-management-api --update-env || true; fi; else echo \"No previous release found for rollback\"; exit 1; fi'"
+          & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote $rollbackCmd
