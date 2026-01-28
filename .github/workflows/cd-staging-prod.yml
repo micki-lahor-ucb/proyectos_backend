@@ -153,34 +153,35 @@ jobs:
           # Run a remote deploy script (avoid CRLF issues when piping from PowerShell)
           $deploySh = "deploy-$env:RELEASE.sh"
           $remoteDeploySh = "/var/www/project-management/releases/$env:RELEASE/$deploySh"
-          $deployContent = @"
-set -euo pipefail
-cd "/var/www/project-management/releases/$env:RELEASE"
-tar -xzf "$archive"
-rm -f "$archive"
-ln -sfn /var/www/project-management/shared/.env .env
-
-export NODE_ENV=staging
-export RELEASE_ID="$env:RELEASE"
-
-if [ -x "./node_modules/.bin/prisma" ]; then
-  ./node_modules/.bin/prisma migrate deploy
-elif command -v npx >/dev/null 2>&1; then
-  npx prisma migrate deploy
-else
-  echo "Prisma CLI not found (no local prisma, no npx)" >&2
-  exit 1
-fi
-
-ln -sfn "/var/www/project-management/releases/$env:RELEASE" /var/www/project-management/current
-
-# Start or restart the app with pm2 (best-effort for local staging container)
-cd /var/www/project-management/current
-if ! command -v pm2 >/dev/null 2>&1; then
-  npm i -g pm2
-fi
-pm2 start dist/main.js --name project-management-api --update-env --time || pm2 restart project-management-api --update-env
-"@
+          $deployContent = @(
+            'set -euo pipefail',
+            "cd `"/var/www/project-management/releases/$env:RELEASE`"",
+            "tar -xzf `"$archive`"",
+            "rm -f `"$archive`"",
+            'ln -sfn /var/www/project-management/shared/.env .env',
+            '',
+            'export NODE_ENV=staging',
+            "export RELEASE_ID=`"$env:RELEASE`"",
+            '',
+            'if [ -x "./node_modules/.bin/prisma" ]; then',
+            '  ./node_modules/.bin/prisma migrate deploy',
+            'elif command -v npx >/dev/null 2>&1; then',
+            '  npx prisma migrate deploy',
+            'else',
+            '  echo "Prisma CLI not found (no local prisma, no npx)" >&2',
+            '  exit 1',
+            'fi',
+            '',
+            "ln -sfn `"/var/www/project-management/releases/$env:RELEASE`" /var/www/project-management/current",
+            '',
+            '# Start or restart the app with pm2 (best-effort for local staging container)',
+            'cd /var/www/project-management/current',
+            'if ! command -v pm2 >/dev/null 2>&1; then',
+            '  npm i -g pm2',
+            'fi',
+            'pm2 start dist/main.js --name project-management-api --update-env --time || pm2 restart project-management-api --update-env'
+          ) -join "`n"
+          $deployContent += "`n"
           # Ensure LF endings and no BOM
           $deployContent = $deployContent -replace "`r`n", "`n" -replace "`r", "`n"
           $utf8NoBom2 = New-Object System.Text.UTF8Encoding $false
@@ -375,34 +376,35 @@ pm2 start dist/main.js --name project-management-api --update-env --time || pm2 
           # Run a remote deploy script (avoid CRLF issues when piping from PowerShell)
           $deploySh = "deploy-$env:RELEASE.sh"
           $remoteDeploySh = "/var/www/project-management/releases/$env:RELEASE/$deploySh"
-          $deployContent = @"
-set -euo pipefail
-cd "/var/www/project-management/releases/$env:RELEASE"
-tar -xzf "$archive"
-rm -f "$archive"
-ln -sfn /var/www/project-management/shared/.env .env
-
-export NODE_ENV=production
-export RELEASE_ID="$env:RELEASE"
-
-if [ -x "./node_modules/.bin/prisma" ]; then
-  ./node_modules/.bin/prisma migrate deploy
-elif command -v npx >/dev/null 2>&1; then
-  npx prisma migrate deploy
-else
-  echo "Prisma CLI not found (no local prisma, no npx)" >&2
-  exit 1
-fi
-
-ln -sfn "/var/www/project-management/releases/$env:RELEASE" /var/www/project-management/current
-
-# Start or restart the app with pm2
-cd /var/www/project-management/current
-if ! command -v pm2 >/dev/null 2>&1; then
-  npm i -g pm2
-fi
-pm2 start dist/main.js --name project-management-api --update-env --time || pm2 restart project-management-api --update-env
-"@
+          $deployContent = @(
+            'set -euo pipefail',
+            "cd `"/var/www/project-management/releases/$env:RELEASE`"",
+            "tar -xzf `"$archive`"",
+            "rm -f `"$archive`"",
+            'ln -sfn /var/www/project-management/shared/.env .env',
+            '',
+            'export NODE_ENV=production',
+            "export RELEASE_ID=`"$env:RELEASE`"",
+            '',
+            'if [ -x "./node_modules/.bin/prisma" ]; then',
+            '  ./node_modules/.bin/prisma migrate deploy',
+            'elif command -v npx >/dev/null 2>&1; then',
+            '  npx prisma migrate deploy',
+            'else',
+            '  echo "Prisma CLI not found (no local prisma, no npx)" >&2',
+            '  exit 1',
+            'fi',
+            '',
+            "ln -sfn `"/var/www/project-management/releases/$env:RELEASE`" /var/www/project-management/current",
+            '',
+            '# Start or restart the app with pm2',
+            'cd /var/www/project-management/current',
+            'if ! command -v pm2 >/dev/null 2>&1; then',
+            '  npm i -g pm2',
+            'fi',
+            'pm2 start dist/main.js --name project-management-api --update-env --time || pm2 restart project-management-api --update-env'
+          ) -join "`n"
+          $deployContent += "`n"
           # Ensure LF endings and no BOM
           $deployContent = $deployContent -replace "`r`n", "`n" -replace "`r", "`n"
           $utf8NoBom2 = New-Object System.Text.UTF8Encoding $false
