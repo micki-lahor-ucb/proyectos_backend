@@ -97,6 +97,15 @@ jobs:
           
           $remote = "$remoteUser@$remoteHost"
           
+          # Use an ephemeral known_hosts file per run (containers change host keys often)
+          $knownHosts = Join-Path $sshDir "known_hosts_ci"
+          if (Test-Path $knownHosts) { Remove-Item -Force $knownHosts }
+
+          # Also scrub the default known_hosts to avoid "REMOTE HOST IDENTIFICATION HAS CHANGED"
+          # (some ssh/scp builds may ignore UserKnownHostsFile options)
+          & ssh-keygen -R "[$remoteHost]:$env:STAGING_PORT" 2>$null | Out-Null
+          & ssh-keygen -R $remoteHost 2>$null | Out-Null
+          
           # Save SSH key with proper format (no BOM, LF line endings)
           $keyContent = $env:STAGING_SSH_KEY
           $keyContent = $keyContent -replace "`r`n", "`n" -replace "`r", "`n"
@@ -114,8 +123,8 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-p", $env:STAGING_PORT,
             "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=NUL",
-            "-o", "GlobalKnownHostsFile=NUL",
+            "-o", "UserKnownHostsFile=$knownHosts",
+            "-o", "GlobalKnownHostsFile=$knownHosts",
             "-o", "BatchMode=yes",
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
@@ -141,6 +150,8 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-P", $env:STAGING_PORT,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=$knownHosts",
+            "-o", "GlobalKnownHostsFile=$knownHosts",
             "-o", "BatchMode=yes",
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
@@ -205,8 +216,8 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-P", $env:STAGING_PORT,
             "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=NUL",
-            "-o", "GlobalKnownHostsFile=NUL",
+            "-o", "UserKnownHostsFile=$knownHosts",
+            "-o", "GlobalKnownHostsFile=$knownHosts",
             "-o", "BatchMode=yes",
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
@@ -221,8 +232,8 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-p", $env:STAGING_PORT,
             "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=NUL",
-            "-o", "GlobalKnownHostsFile=NUL",
+            "-o", "UserKnownHostsFile=$knownHosts",
+            "-o", "GlobalKnownHostsFile=$knownHosts",
             "-o", "BatchMode=yes",
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
@@ -283,6 +294,11 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($remoteUser)) { throw "STAGING_USER is empty/invalid" }
           
           $remote = "$remoteUser@$remoteHost"
+          $knownHosts = Join-Path $sshDir "known_hosts_ci"
+          if (Test-Path $knownHosts) { Remove-Item -Force $knownHosts }
+
+          & ssh-keygen -R "[$remoteHost]:$env:STAGING_PORT" 2>$null | Out-Null
+          & ssh-keygen -R $remoteHost 2>$null | Out-Null
           
           # Save SSH key with proper format (no BOM, LF line endings)
           $keyContent = $env:STAGING_SSH_KEY
@@ -295,7 +311,7 @@ jobs:
           
           # Execute rollback remotely (avoid piping CRLF)
           $rollbackCmd = "bash -lc 'set -euo pipefail; PREV=$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n \"2p\" | tr -d \"/\"); if [ -n \"$PREV\" ]; then echo \"Rolling back to: $PREV\"; ln -sfn \"$PREV\" /var/www/project-management/current; mkdir -p /var/www/project-management/shared/logs /var/www/project-management/shared/run; PIDFILE=/var/www/project-management/shared/run/api.pid; if [ -f \"$PIDFILE\" ] && kill -0 \"$(cat \"$PIDFILE\")\" 2>/dev/null; then kill \"$(cat \"$PIDFILE\")\" || true; sleep 1; fi; cd /var/www/project-management/current; if [ -f .env ]; then set -a; . ./.env; set +a; fi; export NODE_ENV=staging; CUR=$(readlink -f /var/www/project-management/current); export RELEASE_ID=$(basename \"$CUR\"); nohup node dist/main.js > /var/www/project-management/shared/logs/out.log 2> /var/www/project-management/shared/logs/error.log & echo $! > \"$PIDFILE\"; echo \"Rollback started PID $(cat \"$PIDFILE\")\"; else echo \"No previous release found for rollback\"; exit 1; fi'"
-          & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote $rollbackCmd
+          & ssh -i "$sshDir\deploy_key" -p $env:STAGING_PORT -o StrictHostKeyChecking=no -o "UserKnownHostsFile=$knownHosts" -o "GlobalKnownHostsFile=$knownHosts" -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote $rollbackCmd
 
   deploy_production:
     name: Deploy to Production
@@ -343,6 +359,14 @@ jobs:
           if ([string]::IsNullOrWhiteSpace($remoteUser)) { throw "PROD_USER is empty/invalid" }
           
           $remote = "$remoteUser@$remoteHost"
+          $knownHosts = Join-Path $sshDir "known_hosts_ci"
+          if (Test-Path $knownHosts) { Remove-Item -Force $knownHosts }
+          & ssh-keygen -R "[$remoteHost]:$env:PROD_PORT" 2>$null | Out-Null
+          & ssh-keygen -R $remoteHost 2>$null | Out-Null
+          $knownHosts = Join-Path $sshDir "known_hosts_ci"
+          if (Test-Path $knownHosts) { Remove-Item -Force $knownHosts }
+          & ssh-keygen -R "[$remoteHost]:$env:PROD_PORT" 2>$null | Out-Null
+          & ssh-keygen -R $remoteHost 2>$null | Out-Null
           
           # Save SSH key with proper format (no BOM, LF line endings)
           $keyContent = $env:PROD_SSH_KEY
@@ -361,8 +385,8 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-p", $env:PROD_PORT,
             "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=NUL",
-            "-o", "GlobalKnownHostsFile=NUL",
+            "-o", "UserKnownHostsFile=$knownHosts",
+            "-o", "GlobalKnownHostsFile=$knownHosts",
             "-o", "BatchMode=yes",
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
@@ -388,6 +412,8 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-P", $env:PROD_PORT,
             "-o", "StrictHostKeyChecking=no",
+            "-o", "UserKnownHostsFile=$knownHosts",
+            "-o", "GlobalKnownHostsFile=$knownHosts",
             "-o", "BatchMode=yes",
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
@@ -416,6 +442,12 @@ jobs:
             'node -v',
             'major=$(node -p "parseInt(process.versions.node.split(String.fromCharCode(46))[0],10)")',
             'if [ "$major" -lt 18 ]; then echo "Node >=18 required for Prisma" >&2; exit 1; fi',
+            '# Ensure Prisma engine binaries are executable (tar created on Windows may lose +x bits)',
+            'if [ -d "./node_modules/@prisma/engines" ]; then',
+            '  chmod -R a+rX "./node_modules/@prisma/engines" || true',
+            '  find "./node_modules/@prisma/engines" -maxdepth 1 -type f -name "*engine*" -exec chmod +x {} \\; 2>/dev/null || true',
+            'fi',
+            'if [ -d "./node_modules/.bin" ]; then chmod -R a+rx "./node_modules/.bin" 2>/dev/null || true; fi',
             'if [ -f "./node_modules/prisma/build/index.js" ]; then',
             '  node ./node_modules/prisma/build/index.js migrate deploy',
             'else',
@@ -452,8 +484,8 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-P", $env:PROD_PORT,
             "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=NUL",
-            "-o", "GlobalKnownHostsFile=NUL",
+            "-o", "UserKnownHostsFile=$knownHosts",
+            "-o", "GlobalKnownHostsFile=$knownHosts",
             "-o", "BatchMode=yes",
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
@@ -468,8 +500,8 @@ jobs:
             "-i", "$sshDir\deploy_key",
             "-p", $env:PROD_PORT,
             "-o", "StrictHostKeyChecking=no",
-            "-o", "UserKnownHostsFile=NUL",
-            "-o", "GlobalKnownHostsFile=NUL",
+            "-o", "UserKnownHostsFile=$knownHosts",
+            "-o", "GlobalKnownHostsFile=$knownHosts",
             "-o", "BatchMode=yes",
             "-o", "IdentitiesOnly=yes",
             "-o", "PreferredAuthentications=publickey",
@@ -542,4 +574,4 @@ jobs:
           
           # Execute rollback remotely (avoid piping CRLF)
           $rollbackCmd = "bash -lc 'set -euo pipefail; PREV=$(ls -1dt /var/www/project-management/releases/*/ 2>/dev/null | sed -n \"2p\" | tr -d \"/\"); if [ -n \"$PREV\" ]; then echo \"Rolling back to: $PREV\"; ln -sfn \"$PREV\" /var/www/project-management/current; mkdir -p /var/www/project-management/shared/logs /var/www/project-management/shared/run; PIDFILE=/var/www/project-management/shared/run/api.pid; if [ -f \"$PIDFILE\" ] && kill -0 \"$(cat \"$PIDFILE\")\" 2>/dev/null; then kill \"$(cat \"$PIDFILE\")\" || true; sleep 1; fi; cd /var/www/project-management/current; if [ -f .env ]; then set -a; . ./.env; set +a; fi; export NODE_ENV=production; CUR=$(readlink -f /var/www/project-management/current); export RELEASE_ID=$(basename \"$CUR\"); nohup node dist/main.js > /var/www/project-management/shared/logs/out.log 2> /var/www/project-management/shared/logs/error.log & echo $! > \"$PIDFILE\"; echo \"Rollback started PID $(cat \"$PIDFILE\")\"; else echo \"No previous release found for rollback\"; exit 1; fi'"
-          & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o GlobalKnownHostsFile=NUL -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote $rollbackCmd
+          & ssh -i "$sshDir\deploy_key" -p $env:PROD_PORT -o StrictHostKeyChecking=no -o "UserKnownHostsFile=$knownHosts" -o "GlobalKnownHostsFile=$knownHosts" -o BatchMode=yes -o IdentitiesOnly=yes -o PreferredAuthentications=publickey -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 $remote $rollbackCmd
