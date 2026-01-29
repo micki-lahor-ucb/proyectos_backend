@@ -16,6 +16,14 @@ export class AppController {
 
   @Get('health')
   async health() {
+    // SIMULACIÓN ROLLBACK: en staging devolvemos 503 para que falle el health check.
+    // Después de verificar el rollback, quitar este bloque y hacer push de la corrección.
+    if (process.env.NODE_ENV === 'staging') {
+      throw new HttpException(
+        { status: 'error', message: 'Simulated failure for rollback demo' },
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
     try {
       // Validar conexión a la base de datos
       await this.prisma.$queryRaw`SELECT 1`;
